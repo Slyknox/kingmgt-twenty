@@ -22,6 +22,7 @@ const unescapeLike = (pattern: string) => pattern.replace(/\\(.)/g, '$1');
 const matchesCondition = (value: any, condition: Record<string, any>): boolean => {
   if ('in' in condition) return condition.in.includes(value);
   if ('eq' in condition) return value === condition.eq;
+  if ('lt' in condition) return value != null && value < condition.lt;
   if ('is' in condition) return condition.is === 'NULL' ? value == null : value != null;
   if ('ilike' in condition) {
     return String(value ?? '').toLowerCase() === unescapeLike(condition.ilike).toLowerCase();
