@@ -1,4 +1,9 @@
 import { emptyCurrency, hasAmount, isSameCurrencyValue } from 'src/utils/currency';
+import {
+  convertMicros,
+  type ExchangeRates,
+  NO_EXCHANGE_RATES,
+} from 'src/utils/exchange-rates';
 import { type Currency } from 'src/utils/lead-conversion-types';
 
 export type QuoteLineItemRecord = {
@@ -105,9 +110,13 @@ export type QuoteTotals = {
 const plural = (count: number, singular: string, pluralForm: string) =>
   `${count} ${count === 1 ? singular : pluralForm}`;
 
-// Lines are summed in the currency most of them use and never converted; the
-// warning says which lines were left out so the total isn't trusted blindly.
-export const computeQuoteTotals = (lines: QuoteLineItemRecord[]): QuoteTotals => {
+// Lines are summed in the currency most of them use. Others are converted
+// through the exchange rates, or left out without one; the warning says which,
+// so the total isn't trusted blindly.
+export const computeQuoteTotals = (
+  lines: QuoteLineItemRecord[],
+  rates: ExchangeRates = NO_EXCHANGE_RATES,
+): QuoteTotals => {
   const priced = lines.filter((line) => hasAmount(line.unitPrice));
   const countByCurrency = new Map<string, number>();
 
@@ -129,17 +138,27 @@ export const computeQuoteTotals = (lines: QuoteLineItemRecord[]): QuoteTotals =>
   let subtotal = 0;
   let total = 0;
   let otherCurrency = 0;
+  const convertedFrom = new Set<string>();
+  let converted = 0;
 
   for (const line of priced) {
     const amounts = computeLineAmounts(line);
+    const lineCurrency = amounts.subtotal.currencyCode;
+    const lineSubtotal = convertMicros(amounts.subtotal.amountMicros!, lineCurrency, currencyCode, rates);
+    const lineTotal = convertMicros(amounts.total.amountMicros!, lineCurrency, currencyCode, rates);
 
-    if (amounts.subtotal.currencyCode !== currencyCode) {
+    if (lineSubtotal === null || lineTotal === null) {
       otherCurrency++;
       continue;
     }
 
-    subtotal += amounts.subtotal.amountMicros!;
-    total += amounts.total.amountMicros!;
+    if (lineCurrency !== currencyCode) {
+      converted++;
+      convertedFrom.add(lineCurrency);
+    }
+
+    subtotal += lineSubtotal;
+    total += lineTotal;
   }
 
   const unpriced = lines.length - priced.length;
@@ -148,7 +167,10 @@ export const computeQuoteTotals = (lines: QuoteLineItemRecord[]): QuoteTotals =>
       ? `${plural(unpriced, 'line item has', 'line items have')} no price and ${unpriced === 1 ? 'is' : 'are'} left out.`
       : null,
     otherCurrency > 0
-      ? `${plural(otherCurrency, 'line item is', 'line items are')} not in ${currencyCode} and left out.`
+      ? `${plural(otherCurrency, 'line item is', 'line items are')} not in ${currencyCode}, ${otherCurrency === 1 ? 'has' : 'have'} no exchange rate and ${otherCurrency === 1 ? 'is' : 'are'} left out.`
+      : null,
+    converted > 0
+      ? `${plural(converted, 'line item was', 'line items were')} converted to ${currencyCode} from ${[...convertedFrom].sort().join(', ')} at the stored exchange rates.`
       : null,
   ].filter(Boolean);
 

@@ -7,6 +7,7 @@ import {
   computeCampaignRollup,
 } from 'src/utils/compute-campaign-rollup';
 import { isSameCurrencyValue } from 'src/utils/currency';
+import { type ExchangeRates, loadExchangeRates } from 'src/utils/exchange-rates';
 import { fetchAll } from 'src/utils/fetch-all';
 import { type CrmClient, type Currency } from 'src/utils/lead-conversion-types';
 
@@ -60,6 +61,7 @@ const recomputePass = async (
   client: CrmClient,
   campaignIds: string[],
   now: () => Date,
+  rates: ExchangeRates,
 ): Promise<number> => {
   const inCampaigns = { campaignId: { in: campaignIds } };
   const [campaigns, leads, opportunities, members] = await Promise.all([
@@ -105,6 +107,7 @@ const recomputePass = async (
       leadsByCampaignId.get(campaign.id) ?? [],
       opportunitiesByCampaignId.get(campaign.id) ?? [],
       membersByCampaignId.get(campaign.id) ?? [],
+      rates,
     );
 
     // Skipping unchanged campaigns keeps their timeline free of no-op edits.
@@ -139,11 +142,18 @@ export const recomputeCampaignRollups = async ({
   const uniqueIds = [...new Set(campaignIds)].filter(Boolean);
   let updated = 0;
 
+  if (uniqueIds.length === 0) {
+    return 0;
+  }
+
+  const rates = await loadExchangeRates(client);
+
   for (let start = 0; start < uniqueIds.length; start += CAMPAIGN_IDS_PER_PASS) {
     updated += await recomputePass(
       client,
       uniqueIds.slice(start, start + CAMPAIGN_IDS_PER_PASS),
       now,
+      rates,
     );
   }
 

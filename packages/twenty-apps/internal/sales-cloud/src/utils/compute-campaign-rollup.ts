@@ -5,6 +5,11 @@ import {
 import { CampaignMemberStatus } from 'src/constants/campaign-options';
 import { LeadStatus } from 'src/constants/lead-options';
 import { DEFAULT_CURRENCY_CODE, hasAmount } from 'src/utils/currency';
+import {
+  convertMicros,
+  type ExchangeRates,
+  NO_EXCHANGE_RATES,
+} from 'src/utils/exchange-rates';
 import { type Currency } from 'src/utils/lead-conversion-types';
 
 export type CampaignRecord = {
@@ -40,8 +45,9 @@ export type CampaignRollup = {
   otherCurrencyOpportunityCount: number;
 };
 
-// Amounts are only summed in one currency, never converted: the campaign's
-// cost currency, else the one most of its opportunities use.
+// Amounts are summed in one currency: the campaign's cost currency, else the
+// one most of its opportunities use. Others are converted through the
+// workspace's exchange rates, or left out when there is no rate.
 export const resolveCampaignCurrency = (
   campaign: CampaignRecord,
   opportunities: CampaignOpportunityRecord[],
@@ -79,6 +85,7 @@ export const computeCampaignRollup = (
   leads: CampaignLeadRecord[],
   opportunities: CampaignOpportunityRecord[],
   members: CampaignMemberRecord[] = [],
+  rates: ExchangeRates = NO_EXCHANGE_RATES,
 ): CampaignRollup => {
   const currencyCode = resolveCampaignCurrency(campaign, opportunities);
   let pipelineMicros = 0;
@@ -97,15 +104,22 @@ export const computeCampaignRollup = (
       continue;
     }
 
-    if (opportunity.amount.currencyCode !== currencyCode) {
+    const amountMicros = convertMicros(
+      opportunity.amount.amountMicros,
+      opportunity.amount.currencyCode,
+      currencyCode,
+      rates,
+    );
+
+    if (amountMicros === null) {
       otherCurrencyOpportunityCount++;
       continue;
     }
 
     if (isWon) {
-      wonMicros += opportunity.amount.amountMicros;
+      wonMicros += amountMicros;
     } else if (opportunity.forecastCategory !== ForecastCategory.OMITTED) {
-      pipelineMicros += opportunity.amount.amountMicros;
+      pipelineMicros += amountMicros;
     }
   }
 

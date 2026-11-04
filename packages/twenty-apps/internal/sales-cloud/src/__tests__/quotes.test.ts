@@ -4,11 +4,14 @@ import { createFakeCrmClient } from 'src/__tests__/fake-crm-client';
 import { buildEntryName, nameEntries } from 'src/logic-functions/on-price-book-entry-changed.function';
 import { selectNewlySyncingQuoteIds } from 'src/logic-functions/on-quote-changed.function';
 import { collectLineItemChanges } from 'src/logic-functions/on-quote-line-item-changed.function';
+import { selectPriceBookChanges } from 'src/logic-functions/on-quote-changed.function';
 import { computeLineItemPatch, computeQuoteTotals } from 'src/utils/compute-quote-pricing';
+import { buildExchangeRates } from 'src/utils/exchange-rates';
 import {
   keepOneSyncingQuotePerOpportunity,
   priceLineItems,
   recomputeQuotes,
+  repriceQuoteLines,
 } from 'src/utils/sync-quotes';
 
 const usd = (dollars: number) => ({ amountMicros: dollars * 1_000_000, currencyCode: 'USD' });
@@ -64,7 +67,27 @@ describe('computeQuoteTotals', () => {
       discountTotal: usd(50),
       total: usd(200),
       lineItemCount: 4,
-      pricingWarning: '1 line item has no price and is left out. 1 line item is not in USD and left out.',
+      pricingWarning: '1 line item has no price and is left out. 1 line item is not in USD, has no exchange rate and is left out.',
+    });
+  });
+
+  it('converts lines in another currency through the exchange rates', () => {
+    const rates = buildExchangeRates([
+      { currencyCode: 'USD', isCorporate: true },
+      { currencyCode: 'EUR', unitsPerCorporateUnit: 0.8 },
+    ]);
+
+    expect(
+      computeQuoteTotals([
+        { id: 'a', unitPrice: usd(100) },
+        { id: 'b', unitPrice: usd(100) },
+        { id: 'c', unitPrice: eur(80) },
+        { id: 'd', unitPrice: { amountMicros: 1_000_000, currencyCode: 'JPY' } },
+      ], rates),
+    ).toMatchObject({
+      total: usd(300),
+      pricingWarning:
+        '1 line item is not in USD, has no exchange rate and is left out. 1 line item was converted to USD from EUR at the stored exchange rates.',
     });
   });
 
@@ -133,6 +156,40 @@ describe('pricing lines against the database', () => {
     await keepOneSyncingQuotePerOpportunity(client, ['new']);
 
     expect(tables.quote.map((quote) => quote.syncToOpportunity)).toEqual([false, true, true]);
+  });
+});
+
+describe('changing the price book', () => {
+  const seed = () => ({
+    product: [{ id: 'widget', name: 'Widget', listPrice: usd(100) }, { id: 'gadget', name: 'Gadget', listPrice: usd(40) }],
+    priceBookEntry: [
+      { id: 'e1', priceBookId: 'retail', productId: 'widget', unitPrice: usd(90), isActive: true },
+      { id: 'e2', priceBookId: 'partner', productId: 'widget', unitPrice: usd(70), isActive: true },
+      { id: 'e3', priceBookId: 'partner', productId: 'gadget', unitPrice: usd(30), isActive: true },
+    ],
+    quote: [{ id: 'q', priceBookId: 'partner' }],
+    quoteLineItem: [
+      { id: 'from-book', quoteId: 'q', productId: 'widget', unitPrice: usd(90) },
+      { id: 'from-list', quoteId: 'q', productId: 'gadget', unitPrice: usd(40) },
+      { id: 'typed', quoteId: 'q', productId: 'widget', unitPrice: usd(55) },
+    ],
+  });
+
+  it("re-prices lines from the new book and keeps prices someone typed", async () => {
+    const { client, tables } = createFakeCrmClient(seed());
+
+    expect(await repriceQuoteLines(client, [{ quoteId: 'q', previousPriceBookId: 'retail' }])).toBe(2);
+    expect(tables.quoteLineItem.map((line) => line.unitPrice)).toEqual([usd(70), usd(30), usd(55)]);
+  });
+
+  it('only re-prices on a price book change to an existing quote', () => {
+    expect(
+      selectPriceBookChanges('quote.updated', [
+        { recordId: 'q1', properties: { updatedFields: ['priceBookId'], before: { priceBookId: 'old' } } },
+        { recordId: 'q2', properties: { updatedFields: ['name'] } },
+      ]),
+    ).toEqual([{ quoteId: 'q1', previousPriceBookId: 'old' }]);
+    expect(selectPriceBookChanges('quote.created', [{ recordId: 'q', properties: {} }])).toEqual([]);
   });
 });
 

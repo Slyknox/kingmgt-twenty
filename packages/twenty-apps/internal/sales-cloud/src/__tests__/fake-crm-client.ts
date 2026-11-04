@@ -15,6 +15,7 @@ const TABLE_BY_QUERY: Record<string, string> = {
   quoteLineItems: 'quoteLineItem',
   supportCases: 'supportCase',
   campaignMembers: 'campaignMember',
+  exchangeRates: 'exchangeRate',
 };
 
 const unescapeLike = (pattern: string) => pattern.replace(/\\(.)/g, '$1');
@@ -64,7 +65,7 @@ export const createFakeCrmClient = (seed: Partial<Record<string, Row[]>>) => {
   const tables: Record<string, Row[]> = {
     lead: [], company: [], person: [], opportunity: [], campaign: [],
     product: [], priceBook: [], priceBookEntry: [], quote: [], quoteLineItem: [],
-    supportCase: [], campaignMember: [],
+    supportCase: [], campaignMember: [], exchangeRate: [],
     ...Object.fromEntries(Object.entries(seed).map(([name, rows]) => [name, rows!.map((row) => ({ ...row }))])),
   };
   currentTables = tables;

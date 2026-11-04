@@ -10,7 +10,7 @@ export default defineLogicFunction({
   universalIdentifier: IDS.nightlyRecompute,
   name: 'nightly-recompute',
   description:
-    'Fills missing opportunity forecast fields and recalculates every campaign.',
+    'Fills missing opportunity forecast fields and recalculates every campaign and quote.',
   timeoutSeconds: 900,
   cronTriggerSettings: { pattern: '17 3 * * *' },
   handler: () => refreshForecastsAndCampaigns(appClient()),

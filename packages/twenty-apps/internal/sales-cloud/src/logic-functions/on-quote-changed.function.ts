@@ -3,13 +3,37 @@ import { type DatabaseEventBatchPayload } from 'twenty-sdk/logic-function';
 
 import { QUOTE_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIERS as IDS } from 'src/constants/quote-identifiers';
 import { eventAction, isRemovalAction } from 'src/utils/group-by';
-import { keepOneSyncingQuotePerOpportunity, recomputeQuotes } from 'src/utils/sync-quotes';
+import {
+  keepOneSyncingQuotePerOpportunity,
+  type PriceBookChange,
+  recomputeQuotes,
+  repriceQuoteLines,
+} from 'src/utils/sync-quotes';
 import { appClient } from 'src/utils/app-client';
 
 type QuoteEvent = {
   recordId: string;
-  properties: { updatedFields?: string[]; after?: { syncToOpportunity?: boolean | null } | null };
+  properties: {
+    updatedFields?: string[];
+    before?: { priceBookId?: string | null } | null;
+    after?: { syncToOpportunity?: boolean | null; priceBookId?: string | null } | null;
+  };
 };
+
+// A quote created with a price book has no lines yet; only a change on an
+// existing quote re-prices.
+export const selectPriceBookChanges = (
+  batchName: string,
+  events: QuoteEvent[],
+): PriceBookChange[] =>
+  eventAction(batchName) !== 'updated'
+    ? []
+    : events
+        .filter(({ properties }) => (properties.updatedFields ?? []).includes('priceBookId'))
+        .map(({ recordId, properties }) => ({
+          quoteId: recordId,
+          previousPriceBookId: properties.before?.priceBookId ?? null,
+        }));
 
 export const selectNewlySyncingQuoteIds = (batchName: string, events: QuoteEvent[]) => {
   const action = eventAction(batchName);
@@ -38,6 +62,7 @@ const handler = async (batch: DatabaseEventBatchPayload<any>) => {
     client,
     selectNewlySyncingQuoteIds(batch.name, batch.events),
   );
+  await repriceQuoteLines(client, selectPriceBookChanges(batch.name, batch.events));
   await recomputeQuotes(
     client,
     batch.events.map((event: { recordId: string }) => event.recordId),
@@ -48,11 +73,11 @@ export default defineLogicFunction({
   universalIdentifier: IDS.onQuoteChanged,
   name: 'on-quote-changed',
   description:
-    "Keeps one syncing quote per opportunity and copies a syncing quote's total onto its opportunity.",
+    "Re-prices a quote's lines when its price book changes, keeps one syncing quote per opportunity, and copies a syncing quote's total onto its opportunity.",
   timeoutSeconds: 120,
   databaseEventTriggerSettings: {
     eventName: 'quote.*',
-    updatedFields: ['syncToOpportunity', 'opportunityId'],
+    updatedFields: ['syncToOpportunity', 'opportunityId', 'priceBookId'],
     batchMode: true,
   },
   handler,

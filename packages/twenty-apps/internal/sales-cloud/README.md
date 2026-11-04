@@ -33,8 +33,9 @@ fork keeps merging cleanly from upstream.
   - Won means the opportunity is at the Customer stage. Open pipeline leaves
     out won deals and deals in the Omitted forecast category.
   - Amounts are added up in one currency (the campaign's cost currency, or the
-    one most of its deals use) and never converted. Deals in another currency
-    are counted in "Opportunities in other currencies" instead.
+    one most of its deals use). Deals in another currency are converted with
+    the workspace's **exchange rates**; one with no rate is left out and
+    counted in "Opportunities in other currencies".
 - **All Campaigns** table view.
 
 Campaign members: add any number of leads or people to a campaign as
@@ -82,12 +83,33 @@ memberships onto the new person.
   - Quantity defaults to 1. Discount % is held between 0 and 100.
   - Line subtotal = quantity × unit price; line total = subtotal less discount.
 - The quote's subtotal, discount, total and line count update automatically.
-  Lines are added in one currency (the one most lines use) and never
-  converted; lines left out are listed in **Pricing warning**.
+  Lines are added in one currency (the one most lines use). Lines in another
+  currency are converted with the exchange rates; **Pricing warning** says
+  which lines were converted, and which were left out for having no price or
+  no rate.
 - **Sync to opportunity** keeps the opportunity's amount equal to the quote
   total, as in Salesforce. Only one quote per opportunity syncs: turning it on
   turns it off on that opportunity's other quotes.
-- Changing a quote's price book does not re-price its existing lines.
+- Changing a quote's price book re-prices its lines from the new book (or the
+  list price). A line whose price someone typed (one that matches neither the
+  old book's price nor the list price) keeps it.
+
+## Currencies
+
+- **Exchange rate** object, like Salesforce's Manage Currencies: one row per
+  currency, with **Rate** = how many of that currency equal 1 of the
+  corporate currency. Mark one row **Corporate** (its rate is 1).
+- Campaign results and quote totals convert through these rates. With no
+  corporate currency, nothing is converted and other currencies are left out
+  and counted, as before. Changing a rate recalculates every campaign and
+  quote.
+- Optional daily update from the European Central Bank's free reference rates:
+  set the app setting `SALES_CLOUD_ECB_RATES_ENABLED` to `true`. It runs on
+  weekdays at 15:41 UTC, updates only the currencies you have added, and skips
+  rows with **Update daily** switched off. It is the only part of the app that
+  calls the internet, and it is off by default.
+- Opportunity forecast amounts (expected revenue) stay in the deal's own
+  currency.
 
 ## Cases
 
@@ -139,6 +161,6 @@ yarn test               # unit tests
 yarn twenty dev         # sync to a running Twenty server
 ```
 
-Not built: currency conversion (amounts in other currencies are left out of
-totals and counted instead), and re-pricing a quote's lines when its price
-book changes.
+Deleting a quote, campaign, product or price book moves it to the trash and
+leaves its line items, members and entries in place; they are removed only
+when the parent is deleted for good.

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { createFakeCrmClient } from 'src/__tests__/fake-crm-client';
 import { computeCampaignRollup } from 'src/utils/compute-campaign-rollup';
 import { convertLeads } from 'src/utils/convert-leads';
+import { parseEcbRates, planEcbRateUpdates, syncEcbRates } from 'src/utils/ecb-rates';
+import { buildExchangeRates, convertMicros } from 'src/utils/exchange-rates';
 import { syncCampaignMembers } from 'src/utils/sync-campaign-members';
 import {
   collectCampaignIds,
@@ -54,6 +56,80 @@ describe('computeCampaignRollup', () => {
 
   it('shows a loss as negative ROI', () => {
     expect(computeCampaignRollup({ id: 'c', actualCost: usd(1000) }, [], [{ stage: 'CUSTOMER', amount: usd(250) }]).roiPercent).toBe(-75);
+  });
+});
+
+describe('currency conversion', () => {
+  it('converts deals in other currencies and leaves out ones with no rate', () => {
+    const rates = buildExchangeRates([
+      { currencyCode: 'usd', isCorporate: true, unitsPerCorporateUnit: 1 },
+      { currencyCode: 'EUR', unitsPerCorporateUnit: 0.5 },
+      { currencyCode: 'GBP', unitsPerCorporateUnit: 0 },
+    ]);
+
+    expect(
+      computeCampaignRollup({ id: 'c', actualCost: usd(1000) }, [], [
+        { stage: 'CUSTOMER', amount: eur(500) },
+        { stage: 'CUSTOMER', amount: { amountMicros: 1_000_000, currencyCode: 'GBP' } },
+        { stage: 'NEW', amount: usd(10) },
+      ], [], rates),
+    ).toMatchObject({ wonAmount: usd(1000), pipelineAmount: usd(10), roiPercent: 0, otherCurrencyOpportunityCount: 1 });
+  });
+
+  it('converts between two non-corporate currencies', () => {
+    const rates = buildExchangeRates([
+      { currencyCode: 'USD', isCorporate: true },
+      { currencyCode: 'EUR', unitsPerCorporateUnit: 0.8 },
+      { currencyCode: 'GBP', unitsPerCorporateUnit: 0.75 },
+    ]);
+
+    expect(convertMicros(80_000_000, 'EUR', 'GBP', rates)).toBe(75_000_000);
+    expect(convertMicros(5, 'EUR', 'JPY', rates)).toBeNull();
+    expect(convertMicros(5, 'EUR', 'GBP', buildExchangeRates([]))).toBeNull();
+  });
+
+  it('uses the stored rates when recomputing', async () => {
+    const { client, tables } = createFakeCrmClient({
+      exchangeRate: [{ id: 'r1', currencyCode: 'USD', isCorporate: true }, { id: 'r2', currencyCode: 'EUR', unitsPerCorporateUnit: 0.5 }],
+      campaign: [{ id: 'c', actualCost: usd(100) }],
+      opportunity: [{ id: 'o', campaignId: 'c', stage: 'CUSTOMER', amount: eur(100) }],
+    });
+
+    await recomputeCampaignRollups({ client, campaignIds: ['c'], now: NOW });
+
+    expect(tables.campaign[0]).toMatchObject({ wonAmount: usd(200), roiPercent: 100 });
+  });
+});
+
+describe('ECB rates', () => {
+  const XML = `<Cube time='2026-11-04'><Cube currency='USD' rate='1.25'/><Cube currency='GBP' rate='0.8'/><Cube currency='JPY' rate='160'/></Cube>`;
+
+  it('re-bases ECB rates on the corporate currency and skips pinned or unknown rows', () => {
+    expect(parseEcbRates(XML).get('USD')).toBe(1.25);
+    expect(
+      planEcbRateUpdates(
+        [
+          { id: 'usd', currencyCode: 'USD', isCorporate: true },
+          { id: 'eur', currencyCode: 'EUR', unitsPerCorporateUnit: 0.7 },
+          { id: 'gbp', currencyCode: 'GBP', autoUpdate: false, unitsPerCorporateUnit: 0.6 },
+          { id: 'chf', currencyCode: 'CHF', unitsPerCorporateUnit: 0.9 },
+        ],
+        parseEcbRates(XML),
+      ),
+    ).toEqual([{ id: 'eur', unitsPerCorporateUnit: 0.8 }]);
+  });
+
+  it('does nothing without a corporate currency', () => {
+    expect(planEcbRateUpdates([{ id: 'eur', currencyCode: 'EUR' }], parseEcbRates(XML))).toEqual([]);
+  });
+
+  it('writes the updated rates', async () => {
+    const { client, tables } = createFakeCrmClient({
+      exchangeRate: [{ id: 'usd', currencyCode: 'USD', isCorporate: true }, { id: 'jpy', currencyCode: 'JPY', unitsPerCorporateUnit: 100 }],
+    });
+
+    expect(await syncEcbRates(client, async () => XML, NOW)).toBe(1);
+    expect(tables.exchangeRate[1]).toMatchObject({ unitsPerCorporateUnit: 128, rateUpdatedAt: '2026-11-04T12:00:00.000Z' });
   });
 });
 
