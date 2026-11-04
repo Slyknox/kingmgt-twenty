@@ -7,9 +7,16 @@ import {
 } from 'src/constants/universal-identifiers';
 import { convertLeads } from 'src/utils/convert-leads';
 import { type ConvertLeadsInput, toLeadIds } from 'src/utils/to-lead-ids';
+import { appClient } from 'src/utils/app-client';
 
+// Converts as the user who asked, so their permissions apply; cleans up a
+// failed conversion as the app, which may always remove what it created.
 const handler = (input: ConvertLeadsInput) =>
-  convertLeads({ client: new CoreApiClient(), leadIds: toLeadIds(input) });
+  convertLeads({
+    client: new CoreApiClient(),
+    cleanupClient: appClient(),
+    leadIds: toLeadIds(input),
+  });
 
 export default defineLogicFunction({
   universalIdentifier: CONVERT_LEADS_LOGIC_FUNCTION.universalIdentifier,

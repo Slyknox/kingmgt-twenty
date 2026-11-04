@@ -10,7 +10,9 @@ export const formatLeadFullName = (lead: LeadRecord): string =>
     .join(' ');
 
 // Salesforce requires a company on a lead; Twenty doesn't, so a lead with
-// none converts into a company named after the person (like a person account).
+// none converts into a company named after the person (like a person account),
+// else after its email. The last resort carries the lead's id so two unnamed
+// leads never merge into one company.
 export const resolveLeadCompanyName = (lead: LeadRecord): string => {
   if (hasText(lead.companyName)) {
     return lead.companyName.trim();
@@ -18,7 +20,13 @@ export const resolveLeadCompanyName = (lead: LeadRecord): string => {
 
   const fullName = formatLeadFullName(lead);
 
-  return hasText(fullName) ? fullName : 'Unnamed company';
+  if (hasText(fullName)) {
+    return fullName;
+  }
+
+  const email = lead.emails?.primaryEmail;
+
+  return hasText(email) ? email.trim() : `Unnamed company (lead ${lead.id.slice(0, 8)})`;
 };
 
 export const resolveLeadPrimaryEmail = (lead: LeadRecord): string | null => {

@@ -128,8 +128,8 @@ describe('convertLeads', () => {
     expect(tables.company).toHaveLength(0);
   });
 
-  it('undoes what it created and puts a dragged lead back to Qualified when a step fails', async () => {
-    const { client, tables, deleted, failOn } = createFakeCrmClient({
+  it('destroys what it created and puts a dragged lead back to Qualified when a step fails', async () => {
+    const { client, tables, destroyed, failOn } = createFakeCrmClient({
       lead: [{ ...ada, status: 'CONVERTED' }],
     });
     failOn.add('createOpportunity');
@@ -141,7 +141,9 @@ describe('convertLeads', () => {
       status: 'failed',
       error: 'createOpportunity rejected',
     });
-    expect(deleted.map(({ object }) => object)).toEqual(['Person', 'Company']);
+    expect(destroyed.map(({ object }) => object)).toEqual(['Person', 'Company']);
+    expect(tables.person).toHaveLength(0);
+    expect(tables.company).toHaveLength(0);
     expect(tables.lead[0]).toMatchObject({
       status: 'QUALIFIED',
       conversionError: 'createOpportunity rejected',
@@ -150,7 +152,7 @@ describe('convertLeads', () => {
   });
 
   it('never deletes a reused company when a later step fails', async () => {
-    const { client, deleted, failOn } = createFakeCrmClient({
+    const { client, destroyed, failOn } = createFakeCrmClient({
       lead: [{ ...ada }],
       company: [{ id: 'company-existing', name: 'Analytical Engines' }],
     });
@@ -158,7 +160,65 @@ describe('convertLeads', () => {
 
     await convertLeads({ client, leadIds: ['lead-ada'], now: NOW });
 
-    expect(deleted).toEqual([{ object: 'Person', id: expect.any(String) }]);
+    expect(destroyed).toEqual([{ object: 'Person', id: expect.any(String) }]);
+  });
+
+  it('can convert again after a failed attempt', async () => {
+    const { client, tables, failOn } = createFakeCrmClient({ lead: [{ ...ada }] });
+    failOn.add('createOpportunity');
+    await convertLeads({ client, leadIds: ['lead-ada'], now: NOW });
+    failOn.clear();
+
+    const result = await convertLeads({ client, leadIds: ['lead-ada'], now: NOW });
+
+    expect(result.converted).toBe(1);
+    expect(tables.person).toHaveLength(1);
+    expect(tables.company).toHaveLength(1);
+  });
+
+  it('cleans up with the cleanup client, not the user one', async () => {
+    const user = createFakeCrmClient({ lead: [{ ...ada }] });
+    user.failOn.add('createOpportunity');
+    user.failOn.add('destroyPerson');
+    user.failOn.add('destroyCompany');
+
+    await convertLeads({ client: user.client, cleanupClient: { ...user.client, mutation: async (request) => {
+      const name = Object.keys(request)[0];
+      user.failOn.delete(name);
+      return user.client.mutation(request);
+    } }, leadIds: ['lead-ada'], now: NOW });
+
+    expect(user.destroyed.map(({ object }) => object)).toEqual(['Person', 'Company']);
+  });
+
+  it("reuses a company with the lead's website when the names differ", async () => {
+    const { client, tables } = createFakeCrmClient({
+      lead: [{ ...ada, companyName: 'Analytical Engines Inc' }],
+      company: [{ id: 'company-existing', name: 'Analytical Engines', domainName: { primaryLinkUrl: 'ENGINES.io' } }],
+    });
+
+    const [outcome] = (await convertLeads({ client, leadIds: ['lead-ada'], now: NOW })).results;
+
+    expect(outcome).toMatchObject({ companyId: 'company-existing', reusedCompany: true });
+    expect(tables.company).toHaveLength(1);
+  });
+
+  it('gives leads with no name or company their own companies', async () => {
+    const { client, tables } = createFakeCrmClient({
+      lead: [
+        { id: 'aaaaaaaa-1', emails: { primaryEmail: 'x@y.io' } },
+        { id: 'bbbbbbbb-2' },
+        { id: 'cccccccc-3' },
+      ],
+    });
+
+    await convertLeads({ client, leadIds: ['aaaaaaaa-1', 'bbbbbbbb-2', 'cccccccc-3'], now: NOW });
+
+    expect(tables.company.map((company) => company.name)).toEqual([
+      'x@y.io',
+      'Unnamed company (lead bbbbbbbb)',
+      'Unnamed company (lead cccccccc)',
+    ]);
   });
 
   it('does nothing for an empty selection', async () => {

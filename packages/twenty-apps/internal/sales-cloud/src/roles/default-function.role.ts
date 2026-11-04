@@ -2,8 +2,9 @@ import { defineApplicationRole } from 'twenty-sdk/define';
 
 import { DEFAULT_FUNCTION_ROLE_UNIVERSAL_IDENTIFIER } from 'src/constants/universal-identifiers';
 
-// Conversion reads leads, creates companies, people and opportunities, and
-// soft-deletes them again if a conversion fails halfway. It never destroys.
+// Conversion reads leads and creates companies, people and opportunities. If
+// a conversion fails halfway it destroys the records it just created, and
+// only those, so their unique emails and domains are free for the retry.
 export default defineApplicationRole({
   universalIdentifier: DEFAULT_FUNCTION_ROLE_UNIVERSAL_IDENTIFIER,
   label: 'Sales Cloud default function role',
@@ -11,5 +12,5 @@ export default defineApplicationRole({
   canReadAllObjectRecords: true,
   canUpdateAllObjectRecords: true,
   canSoftDeleteAllObjectRecords: true,
-  canDestroyAllObjectRecords: false,
+  canDestroyAllObjectRecords: true,
 });

@@ -1,14 +1,14 @@
-import { CoreApiClient } from 'twenty-client-sdk/core';
 import { defineLogicFunction } from 'twenty-sdk/define';
 import { type DatabaseEventBatchPayload } from 'twenty-sdk/logic-function';
 
 import { CAMPAIGN_FORECAST_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIERS as IDS } from 'src/constants/campaign-forecast-identifiers';
 import { applyOpportunityForecasts } from 'src/utils/apply-opportunity-forecasts';
 import { collectForecastChanges } from 'src/utils/compute-opportunity-forecast';
+import { appClient } from 'src/utils/app-client';
 
 const handler = async (batch: DatabaseEventBatchPayload<any>) => {
   await applyOpportunityForecasts(
-    new CoreApiClient(),
+    appClient(),
     collectForecastChanges(batch.name, batch.events),
   );
 };

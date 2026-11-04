@@ -71,6 +71,25 @@ const findCompanyIdByName = async (
   return companies?.edges?.[0]?.node?.id;
 };
 
+// Domains are unique per company, so a company with the lead's website must
+// be reused even when its name differs ("Acme" vs "Acme Inc").
+const findCompanyIdByDomain = async (
+  client: CrmClient,
+  domain: string,
+): Promise<string | undefined> => {
+  const { companies } = await client.query({
+    companies: {
+      __args: {
+        filter: { domainName: { primaryLinkUrl: { ilike: escapeLikePattern(domain) } } },
+        first: 1,
+      },
+      edges: { node: { id: true } },
+    },
+  });
+
+  return companies?.edges?.[0]?.node?.id;
+};
+
 const findPersonIdByEmail = async (
   client: CrmClient,
   email: string,
@@ -91,7 +110,9 @@ const findPersonIdByEmail = async (
 type CreatedRecord = { mutationName: string; id: string };
 
 // Twenty has no multi-mutation transaction for apps, so a failed conversion
-// soft-deletes whatever it created rather than leaving half a conversion.
+// destroys whatever it created. A soft delete is not enough: trashed people
+// and companies still hold their unique email and domain, and every retry
+// would fail on them.
 const rollBack = async (client: CrmClient, created: CreatedRecord[]) => {
   for (const { mutationName, id } of [...created].reverse()) {
     try {
@@ -106,6 +127,7 @@ const rollBack = async (client: CrmClient, created: CreatedRecord[]) => {
 
 const convertLead = async (
   client: CrmClient,
+  cleanupClient: CrmClient,
   lead: LeadRecord,
   now: () => Date,
 ): Promise<LeadConversionOutcome> => {
@@ -120,10 +142,10 @@ const convertLead = async (
   const created: CreatedRecord[] = [];
 
   try {
-    let companyId = await findCompanyIdByName(
-      client,
-      resolveLeadCompanyName(lead),
-    );
+    const domain = lead.website?.primaryLinkUrl?.trim();
+    let companyId =
+      (await findCompanyIdByName(client, resolveLeadCompanyName(lead))) ??
+      (domain ? await findCompanyIdByDomain(client, domain) : undefined);
     const reusedCompany = companyId !== undefined;
 
     if (!companyId) {
@@ -131,7 +153,7 @@ const convertLead = async (
         createCompany: { __args: { data: buildCompanyData(lead) }, id: true },
       });
       companyId = createCompany.id as string;
-      created.push({ mutationName: 'deleteCompany', id: companyId });
+      created.push({ mutationName: 'destroyCompany', id: companyId });
     }
 
     const primaryEmail = resolveLeadPrimaryEmail(lead);
@@ -148,7 +170,7 @@ const convertLead = async (
         },
       });
       personId = createPerson.id as string;
-      created.push({ mutationName: 'deletePerson', id: personId });
+      created.push({ mutationName: 'destroyPerson', id: personId });
     }
 
     const { createOpportunity } = await client.mutation({
@@ -158,7 +180,7 @@ const convertLead = async (
       },
     });
     const opportunityId = createOpportunity.id as string;
-    created.push({ mutationName: 'deleteOpportunity', id: opportunityId });
+    created.push({ mutationName: 'destroyOpportunity', id: opportunityId });
 
     await client.mutation({
       updateLead: {
@@ -187,7 +209,7 @@ const convertLead = async (
       reusedPerson,
     };
   } catch (error) {
-    await rollBack(client, created);
+    await rollBack(cleanupClient, created);
 
     const message = toErrorMessage(error);
 
@@ -217,12 +239,17 @@ const convertLead = async (
   }
 };
 
+// `client` acts with the converting user's permissions. `cleanupClient`, which
+// defaults to the same client, undoes a failed conversion; pass the app's
+// client so cleanup works even for a user who may not delete records.
 export const convertLeads = async ({
   client,
+  cleanupClient = client,
   leadIds,
   now = () => new Date(),
 }: {
   client: CrmClient;
+  cleanupClient?: CrmClient;
   leadIds: string[];
   now?: () => Date;
 }): Promise<ConvertLeadsResult> => {
@@ -242,7 +269,7 @@ export const convertLeads = async ({
 
     results.push(
       lead
-        ? await convertLead(client, lead, now)
+        ? await convertLead(client, cleanupClient, lead, now)
         : { leadId, status: 'not_found' },
     );
   }

@@ -1,4 +1,3 @@
-import { CoreApiClient } from 'twenty-client-sdk/core';
 import { defineLogicFunction } from 'twenty-sdk/define';
 import { type DatabaseEventBatchPayload } from 'twenty-sdk/logic-function';
 
@@ -7,12 +6,13 @@ import {
   collectCampaignIds,
   recomputeCampaignRollups,
 } from 'src/utils/recompute-campaign-rollups';
+import { appClient } from 'src/utils/app-client';
 
 const handler = async (batch: DatabaseEventBatchPayload<any>) => {
   const campaignIds = collectCampaignIds(batch.events);
 
   if (campaignIds.length > 0) {
-    await recomputeCampaignRollups({ client: new CoreApiClient(), campaignIds });
+    await recomputeCampaignRollups({ client: appClient(), campaignIds });
   }
 };
 

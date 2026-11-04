@@ -8,6 +8,8 @@ import { type DatabaseEventBatchPayload } from 'twenty-sdk/logic-function';
 import { LeadStatus } from 'src/constants/lead-options';
 import { ON_LEAD_STATUS_CONVERTED_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER } from 'src/constants/universal-identifiers';
 import { convertLeads } from 'src/utils/convert-leads';
+import { eventAction, isRemovalAction } from 'src/utils/group-by';
+import { appClient } from 'src/utils/app-client';
 
 type LeadStatusUpdate = {
   status?: string | null;
@@ -31,13 +33,21 @@ export const selectLeadIdsToConvert = (
 const handler = async (
   batch: DatabaseEventBatchPayload<ObjectRecordUpdateEvent<LeadStatusUpdate>>,
 ) => {
+  if (isRemovalAction(eventAction(batch.name))) {
+    return;
+  }
+
   const leadIds = selectLeadIdsToConvert(batch.events);
 
   if (leadIds.length === 0) {
     return;
   }
 
-  await convertLeads({ client: new CoreApiClient(), leadIds });
+  await convertLeads({
+    client: new CoreApiClient(),
+    cleanupClient: appClient(),
+    leadIds,
+  });
 };
 
 export default defineLogicFunction({
@@ -45,10 +55,11 @@ export default defineLogicFunction({
     ON_LEAD_STATUS_CONVERTED_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER,
   name: 'on-lead-status-converted',
   description:
-    'Runs the lead conversion when a lead is moved to the Converted status.',
+    'Runs the lead conversion when a lead is created as, or moved to, Converted.',
   timeoutSeconds: 300,
   databaseEventTriggerSettings: {
-    eventName: 'lead.updated',
+    // Creates pass through too, so an imported Converted lead converts.
+    eventName: 'lead.*',
     updatedFields: ['status'],
     batchMode: true,
   },

@@ -30,6 +30,12 @@ describe('selectLeadIdsToConvert', () => {
       ]),
     ).toEqual(['dragged']);
   });
+
+  it('also picks a lead created or imported as Converted', () => {
+    expect(
+      selectLeadIdsToConvert([{ recordId: 'imported', properties: { after: { status: 'CONVERTED' } } }]),
+    ).toEqual(['imported']);
+  });
 });
 
 describe('buildConversionSnackbar', () => {
