@@ -24,7 +24,7 @@ export default defineObject({
   labelIdentifierFieldMetadataUniversalIdentifier: F.name,
   fields: [
     { universalIdentifier: F.name, type: FieldType.TEXT, name: 'name', label: 'Name', icon: 'IconAbc' },
-    { universalIdentifier: F.type, type: FieldType.SELECT, name: 'type', label: 'Type', icon: 'IconCategory', isNullable: true, options: CAMPAIGN_TYPE_OPTIONS },
+    { universalIdentifier: F.campaignType, type: FieldType.SELECT, name: 'campaignType', label: 'Type', icon: 'IconCategory', isNullable: true, options: CAMPAIGN_TYPE_OPTIONS },
     {
       universalIdentifier: F.status,
       type: FieldType.SELECT,

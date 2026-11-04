@@ -9,7 +9,7 @@ import {
 
 const COLUMNS = [
   { field: F.name, size: 220 },
-  { field: F.type, size: 140 },
+  { field: F.campaignType, size: 140 },
   { field: F.status, size: 130 },
   { field: F.startDate, size: 120 },
   { field: F.endDate, size: 120 },

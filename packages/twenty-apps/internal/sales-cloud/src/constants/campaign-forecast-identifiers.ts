@@ -5,7 +5,7 @@ export const CAMPAIGN_UNIVERSAL_IDENTIFIER = 'bdcfa18f-86e3-4c1d-81ca-9c93c6598b
 
 export const CAMPAIGN_FIELD_UNIVERSAL_IDENTIFIERS = {
   name: 'f80947b1-209f-44ce-83a6-97c6f4c9a1e7',
-  type: '265e2edb-0f5d-4774-9806-b71f5400e254',
+  campaignType: '265e2edb-0f5d-4774-9806-b71f5400e254',
   status: '807740b2-8d32-42d8-91c3-fb60c35bb55e',
   startDate: '7ff527f7-d3c0-4c62-b53e-845dd899e479',
   endDate: 'b4ac501c-bdc5-4dd2-b9d6-248188e58275',
