@@ -30,6 +30,7 @@ const LEAD_SELECTION = {
   website: { primaryLinkUrl: true },
   annualRevenue: { amountMicros: true, currencyCode: true },
   status: true,
+  campaignId: true,
   convertedOpportunityId: true,
 };
 

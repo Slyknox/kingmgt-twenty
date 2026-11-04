@@ -33,6 +33,7 @@ export type LeadRecord = {
   website?: Links | null;
   annualRevenue?: Currency | null;
   status?: string | null;
+  campaignId?: string | null;
   convertedOpportunityId?: string | null;
 };
 

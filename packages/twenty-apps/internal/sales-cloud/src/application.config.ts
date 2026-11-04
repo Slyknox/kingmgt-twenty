@@ -6,5 +6,5 @@ export default defineApplication({
   universalIdentifier: APPLICATION_UNIVERSAL_IDENTIFIER,
   displayName: 'Sales Cloud',
   description:
-    'Salesforce-style sales objects for Twenty: leads with one-click conversion into a company, person and opportunity.',
+    'Salesforce-style sales objects for Twenty: leads with one-click conversion, campaigns with ROI, and opportunity forecasting.',
 });

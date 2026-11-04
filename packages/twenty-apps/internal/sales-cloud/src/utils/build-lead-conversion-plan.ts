@@ -89,6 +89,9 @@ export const buildOpportunityData = (
     stage: 'NEW',
     companyId,
     pointOfContactId: personId,
+    // The lead's campaign becomes the opportunity's, so won deals count
+    // toward the campaign that sourced them.
+    ...(lead.campaignId ? { campaignId: lead.campaignId } : {}),
   };
 };
 

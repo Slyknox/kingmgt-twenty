@@ -2,60 +2,60 @@ import { type CrmClient } from 'src/utils/lead-conversion-types';
 
 type Row = Record<string, any> & { id: string };
 
-const COLLECTION_BY_QUERY: Record<string, string> = {
+const TABLE_BY_QUERY: Record<string, string> = {
   leads: 'lead',
   companies: 'company',
   people: 'person',
+  opportunities: 'opportunity',
+  campaigns: 'campaign',
 };
 
 const unescapeLike = (pattern: string) => pattern.replace(/\\(.)/g, '$1');
 
-const matches = (row: Row, filter: Record<string, any>): boolean =>
+const matchesCondition = (value: any, condition: Record<string, any>): boolean => {
+  if ('in' in condition) return condition.in.includes(value);
+  if ('eq' in condition) return value === condition.eq;
+  if ('is' in condition) return condition.is === 'NULL' ? value == null : value != null;
+  if ('ilike' in condition) {
+    return String(value ?? '').toLowerCase() === unescapeLike(condition.ilike).toLowerCase();
+  }
+  throw new Error(`fake client: unsupported condition ${JSON.stringify(condition)}`);
+};
+
+const matches = (row: Row, filter: Record<string, any> | undefined): boolean =>
+  !filter ||
   Object.entries(filter).every(([key, condition]) => {
-    if (key === 'id' && condition.in) {
-      return condition.in.includes(row.id);
-    }
-    if (key === 'name' && 'ilike' in condition) {
-      return (
-        String(row.name ?? '').toLowerCase() ===
-        unescapeLike(condition.ilike).toLowerCase()
-      );
-    }
-    if (key === 'emails') {
-      return (
-        String(row.emails?.primaryEmail ?? '').toLowerCase() ===
-        unescapeLike(condition.primaryEmail.ilike).toLowerCase()
-      );
-    }
-    throw new Error(`fake client: unsupported filter ${key}`);
+    if (key === 'or') return condition.some((branch: any) => matches(row, branch));
+    if (key === 'emails') return matchesCondition(row.emails?.primaryEmail, condition.primaryEmail);
+    return matchesCondition(row[key], condition);
   });
 
-// Interprets just the request shapes convert-leads sends, against in-memory
-// tables, and lets a test make one mutation throw.
-export const createFakeCrmClient = (seed: {
-  lead?: Row[];
-  company?: Row[];
-  person?: Row[];
-}) => {
+// Interprets the request shapes the app sends, against in-memory tables:
+// filters, cursor paging, create/update/delete. A test can make one
+// mutation throw through failOn.
+export const createFakeCrmClient = (seed: Partial<Record<string, Row[]>>) => {
   const tables: Record<string, Row[]> = {
-    lead: seed.lead ?? [],
-    company: seed.company ?? [],
-    person: seed.person ?? [],
-    opportunity: [],
+    lead: [], company: [], person: [], opportunity: [], campaign: [],
+    ...Object.fromEntries(Object.entries(seed).map(([name, rows]) => [name, rows!.map((row) => ({ ...row }))])),
   };
   const deleted: { object: string; id: string }[] = [];
+  const updates: { object: string; id: string; data: Record<string, any> }[] = [];
   const failOn = new Set<string>();
   let sequence = 0;
 
   const client: CrmClient = {
     query: async (request) => {
       const [queryName, { __args }] = Object.entries(request)[0] as [string, any];
-      const rows = tables[COLLECTION_BY_QUERY[queryName]].filter(
+      const rows = tables[TABLE_BY_QUERY[queryName]].filter(
         (row) => !row.deletedAt && matches(row, __args.filter),
       );
+      const start = __args.after ? Number(__args.after) : 0;
+      const page = rows.slice(start, start + __args.first);
+      const end = start + page.length;
       return {
         [queryName]: {
-          edges: rows.slice(0, __args.first).map((node) => ({ node })),
+          edges: page.map((node) => ({ node })),
+          pageInfo: { hasNextPage: end < rows.length, endCursor: String(end) },
         },
       };
     },
@@ -79,6 +79,7 @@ export const createFakeCrmClient = (seed: {
 
       if (verb === 'update') {
         Object.assign(row, __args.data);
+        updates.push({ object, id: row.id, data: __args.data });
       } else {
         row.deletedAt = 'now';
         deleted.push({ object, id: row.id });
@@ -87,5 +88,5 @@ export const createFakeCrmClient = (seed: {
     },
   };
 
-  return { client, tables, deleted, failOn };
+  return { client, tables, deleted, updates, failOn };
 };
