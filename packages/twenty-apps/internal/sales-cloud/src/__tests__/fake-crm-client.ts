@@ -88,6 +88,7 @@ export const createFakeCrmClient = (seed: Partial<Record<string, Row[]>>) => {
         [queryName]: {
           edges: page.map((node) => ({ node: withRelations(node, __args, request[queryName]) })),
           pageInfo: { hasNextPage: end < rows.length, endCursor: String(end) },
+          totalCount: rows.length,
         },
       };
     },

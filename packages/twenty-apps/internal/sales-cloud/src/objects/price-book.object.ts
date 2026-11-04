@@ -16,7 +16,7 @@ export default defineObject({
   labelIdentifierFieldMetadataUniversalIdentifier: F.name,
   fields: [
     { universalIdentifier: F.name, type: FieldType.TEXT, name: 'name', label: 'Name', icon: 'IconAbc' },
-    { universalIdentifier: F.isActive, type: FieldType.BOOLEAN, name: 'isActive', label: 'Active', icon: 'IconToggleRight', defaultValue: true },
+    { universalIdentifier: F.isActive, type: FieldType.BOOLEAN, name: 'isActive', label: 'Active', icon: 'IconToggleRight', defaultValue: true, isNullable: false },
     { universalIdentifier: F.description, type: FieldType.TEXT, name: 'description', label: 'Description', icon: 'IconNotes', isNullable: true },
   ],
 });

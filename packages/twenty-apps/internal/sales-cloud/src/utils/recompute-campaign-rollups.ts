@@ -1,11 +1,11 @@
 import {
   type CampaignLeadRecord,
-  type CampaignMemberRecord,
   type CampaignOpportunityRecord,
   type CampaignRecord,
   type CampaignRollup,
   computeCampaignRollup,
 } from 'src/utils/compute-campaign-rollup';
+import { CampaignMemberStatus } from 'src/constants/campaign-options';
 import { isSameCurrencyValue } from 'src/utils/currency';
 import { type ExchangeRates, loadExchangeRates } from 'src/utils/exchange-rates';
 import { fetchAll } from 'src/utils/fetch-all';
@@ -57,6 +57,32 @@ const groupByCampaignId = <TRecord extends { campaignId?: string | null }>(
   return byCampaignId;
 };
 
+const countMembersWhere = async (client: CrmClient, filter: Record<string, unknown>) => {
+  const { campaignMembers } = await client.query({
+    campaignMembers: { __args: { filter, first: 1 }, totalCount: true },
+  });
+
+  return (campaignMembers?.totalCount as number | undefined) ?? 0;
+};
+
+// Members are counted with totalCount, not read: a campaign can have far more
+// members than one run could page through, and a capped count would look exact.
+const countMembers = async (client: CrmClient, campaignIds: string[]) => {
+  const counts = new Map<string, { memberCount: number; respondedMemberCount: number }>();
+
+  for (const campaignId of campaignIds) {
+    counts.set(campaignId, {
+      memberCount: await countMembersWhere(client, { campaignId: { eq: campaignId } }),
+      respondedMemberCount: await countMembersWhere(client, {
+        campaignId: { eq: campaignId },
+        memberStatus: { eq: CampaignMemberStatus.RESPONDED },
+      }),
+    });
+  }
+
+  return counts;
+};
+
 const recomputePass = async (
   client: CrmClient,
   campaignIds: string[],
@@ -90,25 +116,25 @@ const recomputePass = async (
       forecastCategory: true,
       amount: CURRENCY,
     }),
-    fetchAll<CampaignMemberRecord>(client, 'campaignMembers', inCampaigns, {
-      campaignId: true,
-      memberStatus: true,
-    }),
+    countMembers(client, campaignIds),
   ]);
 
   const leadsByCampaignId = groupByCampaignId(leads);
   const opportunitiesByCampaignId = groupByCampaignId(opportunities);
-  const membersByCampaignId = groupByCampaignId(members);
+
   let updated = 0;
 
   for (const campaign of campaigns) {
-    const rollup = computeCampaignRollup(
-      campaign,
-      leadsByCampaignId.get(campaign.id) ?? [],
-      opportunitiesByCampaignId.get(campaign.id) ?? [],
-      membersByCampaignId.get(campaign.id) ?? [],
-      rates,
-    );
+    const rollup: CampaignRollup = {
+      ...computeCampaignRollup(
+        campaign,
+        leadsByCampaignId.get(campaign.id) ?? [],
+        opportunitiesByCampaignId.get(campaign.id) ?? [],
+        [],
+        rates,
+      ),
+      ...(members.get(campaign.id) ?? { memberCount: 0, respondedMemberCount: 0 }),
+    };
 
     // Skipping unchanged campaigns keeps their timeline free of no-op edits.
     if (isUnchanged(campaign, rollup)) {

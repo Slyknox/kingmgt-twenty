@@ -209,6 +209,26 @@ describe('campaign members', () => {
     ]);
   });
 
+  it('merges a lead membership into the person\'s own one for the same campaign', async () => {
+    const { client, tables } = createFakeCrmClient({
+      lead: [{ id: 'l1', name: { firstName: 'Ada', lastName: 'Lovelace' }, companyName: 'Engines', emails: { primaryEmail: 'ada@engines.io' } }],
+      person: [{ id: 'p1', emails: { primaryEmail: 'ada@engines.io' } }],
+      campaignMember: [
+        { id: 'lead-row', campaignId: 'c', leadId: 'l1', memberStatus: 'RESPONDED', respondedAt: '2026-10-01T00:00:00.000Z' },
+        { id: 'person-row', campaignId: 'c', personId: 'p1', memberStatus: 'SENT' },
+        { id: 'other', campaignId: 'd', leadId: 'l1', memberStatus: 'SENT' },
+      ],
+    });
+
+    await convertLeads({ client, leadIds: ['l1'], now: NOW });
+
+    const live = tables.campaignMember.filter((member) => !member.deletedAt);
+    expect(live.map(({ id, personId, memberStatus }) => [id, personId, memberStatus])).toEqual([
+      ['person-row', 'p1', 'RESPONDED'],
+      ['other', 'p1', 'SENT'],
+    ]);
+  });
+
   it('moves a converted lead\'s memberships onto the new person', async () => {
     const { client, tables } = createFakeCrmClient({
       lead: [{ id: 'l1', name: { firstName: 'Grace', lastName: 'Hopper' }, companyName: 'Navy' }],

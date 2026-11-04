@@ -29,7 +29,7 @@ export default defineObject({
       options: QUOTE_STATUS_OPTIONS,
     },
     { universalIdentifier: F.expirationDate, type: FieldType.DATE, name: 'expirationDate', label: 'Expiration date', icon: 'IconCalendarDue', isNullable: true },
-    { universalIdentifier: F.syncToOpportunity, type: FieldType.BOOLEAN, name: 'syncToOpportunity', label: 'Sync to opportunity', description: "Keeps the opportunity's amount equal to this quote's total. Only one quote per opportunity syncs.", icon: 'IconRefresh', defaultValue: false },
+    { universalIdentifier: F.syncToOpportunity, type: FieldType.BOOLEAN, name: 'syncToOpportunity', label: 'Sync to opportunity', description: "Keeps the opportunity's amount equal to this quote's total. Only one quote per opportunity syncs.", icon: 'IconRefresh', defaultValue: false, isNullable: false },
     { universalIdentifier: F.subtotal, type: FieldType.CURRENCY, name: 'subtotal', label: 'Subtotal', description: `Before discounts. ${CALCULATED}`, icon: 'IconReceipt', isNullable: true },
     { universalIdentifier: F.discountTotal, type: FieldType.CURRENCY, name: 'discountTotal', label: 'Discount', description: CALCULATED, icon: 'IconDiscount', isNullable: true },
     { universalIdentifier: F.total, type: FieldType.CURRENCY, name: 'total', label: 'Total', description: CALCULATED, icon: 'IconCash', isNullable: true },

@@ -1,4 +1,6 @@
+import { CampaignMemberStatus } from 'src/constants/campaign-options';
 import { LeadStatus } from 'src/constants/lead-options';
+import { fetchAll } from 'src/utils/fetch-all';
 import {
   buildCompanyData,
   buildOpportunityData,
@@ -107,23 +109,61 @@ const findPersonIdByEmail = async (
   return people?.edges?.[0]?.node?.id;
 };
 
+type MembershipRecord = {
+  id: string;
+  campaignId?: string | null;
+  memberStatus?: string | null;
+  respondedAt?: string | null;
+};
+
+const MEMBERSHIP_SELECTION = { id: true, campaignId: true, memberStatus: true, respondedAt: true };
+
 // Like Salesforce, the lead's campaign memberships follow it to the person,
-// so the person's campaign history is complete after conversion.
+// so the person's campaign history is complete after conversion. Where the
+// person is already in that campaign, the two memberships merge into the
+// person's (keeping a response), so the campaign never counts them twice.
 const linkCampaignMembershipsToPerson = async (
   client: CrmClient,
   leadId: string,
   personId: string,
 ) => {
-  const { campaignMembers } = await client.query({
-    campaignMembers: {
-      __args: { filter: { leadId: { eq: leadId }, personId: { is: 'NULL' } }, first: 200 },
-      edges: { node: { id: true } },
-    },
-  });
+  const [leadMemberships, personMemberships] = await Promise.all([
+    fetchAll<MembershipRecord>(
+      client,
+      'campaignMembers',
+      { leadId: { eq: leadId }, personId: { is: 'NULL' } },
+      MEMBERSHIP_SELECTION,
+    ),
+    fetchAll<MembershipRecord>(client, 'campaignMembers', { personId: { eq: personId } }, MEMBERSHIP_SELECTION),
+  ]);
+  const personMembershipByCampaignId = new Map(
+    personMemberships.map((membership) => [membership.campaignId, membership]),
+  );
 
-  for (const edge of campaignMembers?.edges ?? []) {
+  for (const membership of leadMemberships) {
+    const existing = personMembershipByCampaignId.get(membership.campaignId);
+
+    if (!existing) {
+      await client.mutation({
+        updateCampaignMember: { __args: { id: membership.id, data: { personId } }, id: true },
+      });
+      continue;
+    }
+
+    if (membership.memberStatus === CampaignMemberStatus.RESPONDED && existing.memberStatus !== CampaignMemberStatus.RESPONDED) {
+      await client.mutation({
+        updateCampaignMember: {
+          __args: {
+            id: existing.id,
+            data: { memberStatus: CampaignMemberStatus.RESPONDED, respondedAt: membership.respondedAt ?? null },
+          },
+          id: true,
+        },
+      });
+    }
+
     await client.mutation({
-      updateCampaignMember: { __args: { id: edge.node.id, data: { personId } }, id: true },
+      deleteCampaignMember: { __args: { id: membership.id }, id: true },
     });
   }
 };

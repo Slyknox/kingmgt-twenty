@@ -70,6 +70,19 @@ export const computeLineItemPatch = (
     patch.name = context.productName;
   }
 
+  const productChangedWithoutPrice =
+    change.productChanged &&
+    !change.unitPriceSetByUser &&
+    !hasAmount(context.defaultUnitPrice) &&
+    hasAmount(line.unitPrice);
+
+  // A price belongs to the product it came from; a new product with no price
+  // leaves the line unpriced (and flagged on the quote) rather than wrong.
+  if (productChangedWithoutPrice) {
+    patch.unitPrice = emptyCurrency(line.unitPrice?.currencyCode);
+    priced.unitPrice = null;
+  }
+
   const shouldApplyDefault =
     hasAmount(context.defaultUnitPrice) &&
     ((change.productChanged && !change.unitPriceSetByUser) || !hasAmount(line.unitPrice));
@@ -107,6 +120,13 @@ export type QuoteTotals = {
   pricingWarning: string | null;
 };
 
+export type QuoteTotalsResult = {
+  totals: QuoteTotals;
+  // Lines whose amounts made it into the total; zero means the total says
+  // nothing about the deal and must not overwrite its amount.
+  includedLineCount: number;
+};
+
 const plural = (count: number, singular: string, pluralForm: string) =>
   `${count} ${count === 1 ? singular : pluralForm}`;
 
@@ -116,7 +136,12 @@ const plural = (count: number, singular: string, pluralForm: string) =>
 export const computeQuoteTotals = (
   lines: QuoteLineItemRecord[],
   rates: ExchangeRates = NO_EXCHANGE_RATES,
-): QuoteTotals => {
+): QuoteTotals => computeQuoteTotalsWithCount(lines, rates).totals;
+
+export const computeQuoteTotalsWithCount = (
+  lines: QuoteLineItemRecord[],
+  rates: ExchangeRates = NO_EXCHANGE_RATES,
+): QuoteTotalsResult => {
   const priced = lines.filter((line) => hasAmount(line.unitPrice));
   const countByCurrency = new Map<string, number>();
 
@@ -140,6 +165,7 @@ export const computeQuoteTotals = (
   let otherCurrency = 0;
   const convertedFrom = new Set<string>();
   let converted = 0;
+  let included = 0;
 
   for (const line of priced) {
     const amounts = computeLineAmounts(line);
@@ -159,6 +185,7 @@ export const computeQuoteTotals = (
 
     subtotal += lineSubtotal;
     total += lineTotal;
+    included++;
   }
 
   const unpriced = lines.length - priced.length;
@@ -175,10 +202,13 @@ export const computeQuoteTotals = (
   ].filter(Boolean);
 
   return {
-    subtotal: { amountMicros: subtotal, currencyCode },
-    discountTotal: { amountMicros: subtotal - total, currencyCode },
-    total: { amountMicros: total, currencyCode },
-    lineItemCount: lines.length,
-    pricingWarning: warnings.length > 0 ? warnings.join(' ') : null,
+    totals: {
+      subtotal: { amountMicros: subtotal, currencyCode },
+      discountTotal: { amountMicros: subtotal - total, currencyCode },
+      total: { amountMicros: total, currencyCode },
+      lineItemCount: lines.length,
+      pricingWarning: warnings.length > 0 ? warnings.join(' ') : null,
+    },
+    includedLineCount: included,
   };
 };

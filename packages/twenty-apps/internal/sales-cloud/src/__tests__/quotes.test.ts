@@ -37,6 +37,16 @@ describe('computeLineItemPatch', () => {
     ).toEqual({ subtotal: usd(80), total: usd(80) });
   });
 
+  it("clears the old product's price when the new product has none", () => {
+    expect(
+      computeLineItemPatch({ id: 'l', name: 'Old', unitPrice: usd(70), subtotal: usd(70), total: usd(70) }, PICKED, { productName: 'Unpriced' }),
+    ).toEqual({
+      unitPrice: { amountMicros: null, currencyCode: 'USD' },
+      subtotal: { amountMicros: null, currencyCode: 'USD' },
+      total: { amountMicros: null, currencyCode: 'USD' },
+    });
+  });
+
   it('counts an empty quantity as 1 and clamps a discount over 100%', () => {
     expect(
       computeLineItemPatch({ id: 'l', name: 'x', unitPrice: usd(50), discountPercent: 140 }, NOTHING, {}),
@@ -99,7 +109,7 @@ describe('computeQuoteTotals', () => {
 describe('pricing lines against the database', () => {
   const seed = () => ({
     product: [{ id: 'widget', name: 'Widget', listPrice: usd(100) }, { id: 'gadget', name: 'Gadget', listPrice: usd(40) }],
-    priceBook: [{ id: 'partner', name: 'Partner' }],
+    priceBook: [{ id: 'partner', name: 'Partner', isActive: true }],
     priceBookEntry: [
       { id: 'e1', priceBookId: 'partner', productId: 'widget', unitPrice: usd(70), isActive: true },
       { id: 'e2', priceBookId: 'partner', productId: 'gadget', unitPrice: usd(1), isActive: false },
@@ -134,6 +144,38 @@ describe('pricing lines against the database', () => {
     expect(updates.length).toBe(firstPass);
   });
 
+  it('leaves the opportunity alone while a syncing quote has no priced lines', async () => {
+    const { client, tables } = createFakeCrmClient({
+      opportunity: [{ id: 'deal', amount: eur(50_000) }],
+      quote: [{ id: 'q', opportunityId: 'deal', syncToOpportunity: true }],
+    });
+
+    await recomputeQuotes(client, ['q']);
+
+    expect(tables.opportunity[0].amount).toEqual(eur(50_000));
+    expect(tables.quote[0].total).toEqual(usd(0));
+  });
+
+  it('skips inactive products and entries in inactive price books', async () => {
+    const { client, tables } = createFakeCrmClient({
+      product: [
+        { id: 'retired', name: 'Retired', listPrice: usd(10), isActive: false },
+        { id: 'widget', name: 'Widget', listPrice: usd(100), isActive: true },
+      ],
+      priceBook: [{ id: 'old', isActive: false }],
+      priceBookEntry: [{ id: 'e', priceBookId: 'old', productId: 'widget', unitPrice: usd(1), isActive: true }],
+      quote: [{ id: 'q', priceBookId: 'old' }],
+      quoteLineItem: [
+        { id: 'l1', quoteId: 'q', productId: 'retired' },
+        { id: 'l2', quoteId: 'q', productId: 'widget' },
+      ],
+    });
+
+    await priceLineItems(client, new Map([['l1', PICKED], ['l2', PICKED]]));
+
+    expect(tables.quoteLineItem.map((line) => line.unitPrice ?? null)).toEqual([null, usd(100)]);
+  });
+
   it("does not touch the opportunity of a quote that isn't syncing", async () => {
     const data = seed();
     data.quote[0].syncToOpportunity = false;
@@ -162,6 +204,7 @@ describe('pricing lines against the database', () => {
 describe('changing the price book', () => {
   const seed = () => ({
     product: [{ id: 'widget', name: 'Widget', listPrice: usd(100) }, { id: 'gadget', name: 'Gadget', listPrice: usd(40) }],
+    priceBook: [{ id: 'retail', isActive: true }, { id: 'partner', isActive: true }],
     priceBookEntry: [
       { id: 'e1', priceBookId: 'retail', productId: 'widget', unitPrice: usd(90), isActive: true },
       { id: 'e2', priceBookId: 'partner', productId: 'widget', unitPrice: usd(70), isActive: true },

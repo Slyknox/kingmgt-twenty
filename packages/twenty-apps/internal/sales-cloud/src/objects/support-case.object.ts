@@ -51,6 +51,6 @@ export default defineObject({
     { universalIdentifier: F.firstRespondedAt, type: FieldType.DATE_TIME, name: 'firstRespondedAt', label: 'First responded at', description: 'When the case first left New. Set automatically.', icon: 'IconMessageReply', isNullable: true },
     { universalIdentifier: F.closedAt, type: FieldType.DATE_TIME, name: 'closedAt', label: 'Closed at', description: 'Set when closed, cleared when reopened.', icon: 'IconCalendarCheck', isNullable: true },
     { universalIdentifier: F.slaDueAt, type: FieldType.DATE_TIME, name: 'slaDueAt', label: 'Due by', description: 'Created time plus the priority deadline. Set automatically.', icon: 'IconAlarm', isNullable: true },
-    { universalIdentifier: F.isSlaBreached, type: FieldType.BOOLEAN, name: 'isSlaBreached', label: 'Overdue', description: 'Not closed by its deadline. Checked every hour.', icon: 'IconAlertTriangle', defaultValue: false },
+    { universalIdentifier: F.isSlaBreached, type: FieldType.BOOLEAN, name: 'isSlaBreached', label: 'Overdue', description: 'Not closed by its deadline. Checked every hour.', icon: 'IconAlertTriangle', defaultValue: false, isNullable: false },
   ],
 });

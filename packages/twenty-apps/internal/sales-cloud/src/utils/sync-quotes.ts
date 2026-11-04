@@ -1,8 +1,9 @@
 import {
   computeLineItemPatch,
-  computeQuoteTotals,
+  computeQuoteTotalsWithCount,
   type LineItemChange,
   type QuoteLineItemRecord,
+  type QuoteTotals,
 } from 'src/utils/compute-quote-pricing';
 import { hasAmount, isSameCurrencyValue } from 'src/utils/currency';
 import { loadExchangeRates } from 'src/utils/exchange-rates';
@@ -36,7 +37,12 @@ type QuoteRecord = {
   pricingWarning?: string | null;
 };
 
-type ProductRecord = { id: string; name?: string | null; listPrice?: Currency | null };
+type ProductRecord = {
+  id: string;
+  name?: string | null;
+  listPrice?: Currency | null;
+  isActive?: boolean | null;
+};
 
 type EntryRecord = {
   priceBookId?: string | null;
@@ -57,7 +63,7 @@ const fetchQuotes = (client: CrmClient, quoteIds: string[]) =>
     pricingWarning: true,
   });
 
-const isUnchanged = (quote: QuoteRecord, totals: ReturnType<typeof computeQuoteTotals>) =>
+const isUnchanged = (quote: QuoteRecord, totals: QuoteTotals) =>
   isSameCurrencyValue(quote.subtotal, totals.subtotal) &&
   isSameCurrencyValue(quote.discountTotal, totals.discountTotal) &&
   isSameCurrencyValue(quote.total, totals.total) &&
@@ -87,7 +93,10 @@ export const recomputeQuotes = async (
   let updated = 0;
 
   for (const quote of quotes) {
-    const totals = computeQuoteTotals(linesByQuoteId.get(quote.id) ?? [], rates);
+    const { totals, includedLineCount } = computeQuoteTotalsWithCount(
+      linesByQuoteId.get(quote.id) ?? [],
+      rates,
+    );
 
     if (!isUnchanged(quote, totals)) {
       await client.mutation({
@@ -96,7 +105,7 @@ export const recomputeQuotes = async (
       updated++;
     }
 
-    if (quote.syncToOpportunity && quote.opportunityId) {
+    if (quote.syncToOpportunity && quote.opportunityId && includedLineCount > 0) {
       syncedAmountByOpportunityId.set(quote.opportunityId, totals.total);
     }
   }
@@ -179,14 +188,23 @@ const loadProductPrices = async (
   productIds: string[],
   priceBookIds: string[],
 ): Promise<ProductPrices> => {
-  const [products, entries] = await Promise.all([
+  const [products, activePriceBooks, entries] = await Promise.all([
     productIds.length > 0
       ? fetchAll<ProductRecord>(client, 'products', { id: { in: productIds } }, {
           id: true,
           name: true,
           listPrice: CURRENCY,
+          isActive: true,
         })
       : Promise.resolve([] as ProductRecord[]),
+    priceBookIds.length > 0
+      ? fetchAll<{ id: string }>(
+          client,
+          'priceBooks',
+          { id: { in: priceBookIds }, isActive: { eq: true } },
+          { id: true },
+        )
+      : Promise.resolve([] as { id: string }[]),
     priceBookIds.length > 0 && productIds.length > 0
       ? fetchAll<EntryRecord>(
           client,
@@ -201,21 +219,26 @@ const loadProductPrices = async (
       : Promise.resolve([] as EntryRecord[]),
   ]);
 
+  const activePriceBookIds = new Set(activePriceBooks.map(({ id }) => id));
+
   return {
     productById: new Map(products.map((product) => [product.id, product])),
     entryPrice: new Map(
-      entries.map((entry) => [`${entry.priceBookId}:${entry.productId}`, entry.unitPrice]),
+      entries
+        .filter((entry) => entry.priceBookId && activePriceBookIds.has(entry.priceBookId))
+        .map((entry) => [`${entry.priceBookId}:${entry.productId}`, entry.unitPrice]),
     ),
   };
 };
 
-// The price book's active entry, else the product's list price.
+// The price book's active entry, else the product's list price. Inactive
+// products, and entries in inactive price books, price nothing new.
 const defaultPriceFor = (
   prices: ProductPrices,
   productId: string | null | undefined,
   priceBookId: string | null | undefined,
 ): Currency | null | undefined => {
-  if (!productId) {
+  if (!productId || prices.productById.get(productId)?.isActive === false) {
     return undefined;
   }
 

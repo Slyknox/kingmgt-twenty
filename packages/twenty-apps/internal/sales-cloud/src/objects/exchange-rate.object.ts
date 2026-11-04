@@ -29,8 +29,8 @@ export default defineObject({
       isNullable: true,
       universalSettings: { dataType: 'float', decimals: 6 },
     },
-    { universalIdentifier: F.isCorporate, type: FieldType.BOOLEAN, name: 'isCorporate', label: 'Corporate', description: 'The currency every rate is measured against. Mark exactly one.', icon: 'IconBuildingBank', defaultValue: false },
-    { universalIdentifier: F.autoUpdate, type: FieldType.BOOLEAN, name: 'autoUpdate', label: 'Update daily', description: 'Let the daily ECB sync update this rate, when the sync is switched on', icon: 'IconRefresh', defaultValue: true },
+    { universalIdentifier: F.isCorporate, type: FieldType.BOOLEAN, name: 'isCorporate', label: 'Corporate', description: 'The currency every rate is measured against. Mark exactly one.', icon: 'IconBuildingBank', defaultValue: false, isNullable: false },
+    { universalIdentifier: F.autoUpdate, type: FieldType.BOOLEAN, name: 'autoUpdate', label: 'Update daily', description: 'Let the daily ECB sync update this rate, when the sync is switched on', icon: 'IconRefresh', defaultValue: true, isNullable: false },
     { universalIdentifier: F.rateUpdatedAt, type: FieldType.DATE_TIME, name: 'rateUpdatedAt', label: 'Rate updated at', icon: 'IconClock', isNullable: true },
   ],
 });
