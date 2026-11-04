@@ -1,5 +1,6 @@
 import {
   type CampaignLeadRecord,
+  type CampaignMemberRecord,
   type CampaignOpportunityRecord,
   type CampaignRecord,
   type CampaignRollup,
@@ -14,6 +15,8 @@ const CAMPAIGN_IDS_PER_PASS = 50;
 const CURRENCY = { amountMicros: true, currencyCode: true };
 
 type StoredCampaign = CampaignRecord & {
+  memberCount?: number | null;
+  respondedMemberCount?: number | null;
   leadCount?: number | null;
   convertedLeadCount?: number | null;
   opportunityCount?: number | null;
@@ -25,6 +28,8 @@ type StoredCampaign = CampaignRecord & {
 };
 
 const isUnchanged = (stored: StoredCampaign, rollup: CampaignRollup) =>
+  stored.memberCount === rollup.memberCount &&
+  stored.respondedMemberCount === rollup.respondedMemberCount &&
   stored.leadCount === rollup.leadCount &&
   stored.convertedLeadCount === rollup.convertedLeadCount &&
   stored.opportunityCount === rollup.opportunityCount &&
@@ -57,11 +62,13 @@ const recomputePass = async (
   now: () => Date,
 ): Promise<number> => {
   const inCampaigns = { campaignId: { in: campaignIds } };
-  const [campaigns, leads, opportunities] = await Promise.all([
+  const [campaigns, leads, opportunities, members] = await Promise.all([
     fetchAll<StoredCampaign>(client, 'campaigns', { id: { in: campaignIds } }, {
       id: true,
       actualCost: CURRENCY,
       budgetedCost: CURRENCY,
+      memberCount: true,
+      respondedMemberCount: true,
       leadCount: true,
       convertedLeadCount: true,
       opportunityCount: true,
@@ -81,10 +88,15 @@ const recomputePass = async (
       forecastCategory: true,
       amount: CURRENCY,
     }),
+    fetchAll<CampaignMemberRecord>(client, 'campaignMembers', inCampaigns, {
+      campaignId: true,
+      memberStatus: true,
+    }),
   ]);
 
   const leadsByCampaignId = groupByCampaignId(leads);
   const opportunitiesByCampaignId = groupByCampaignId(opportunities);
+  const membersByCampaignId = groupByCampaignId(members);
   let updated = 0;
 
   for (const campaign of campaigns) {
@@ -92,6 +104,7 @@ const recomputePass = async (
       campaign,
       leadsByCampaignId.get(campaign.id) ?? [],
       opportunitiesByCampaignId.get(campaign.id) ?? [],
+      membersByCampaignId.get(campaign.id) ?? [],
     );
 
     // Skipping unchanged campaigns keeps their timeline free of no-op edits.

@@ -21,6 +21,8 @@ export const CAMPAIGN_FIELD_UNIVERSAL_IDENTIFIERS = {
   wonAmount: '8f6153a8-6dfe-4842-bfff-00a42dead5ff',
   roiPercent: '287c584f-0bef-4d6c-bf34-b6f0cc465703',
   otherCurrencyOpportunityCount: '5dfc716b-2844-41dd-a82f-f6bd10f76c34',
+  memberCount: '2ef2cdbd-a117-4697-a3b9-d697e268010d',
+  respondedMemberCount: 'bb7ccf18-ad88-419a-ba0c-eeb48a6a7def',
   rollupsUpdatedAt: 'bef68a8c-f974-4396-9f9e-dd070ce4c63c',
 } as const;
 
@@ -119,3 +121,38 @@ export const CAMPAIGN_FORECAST_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIERS = {
   nightlyRecompute: '17d9a34b-e446-4108-bc1e-fe65a36a8c2b',
   postInstall: '5397fa59-9a78-4dcd-83c6-3deb77960ddf',
 } as const;
+
+export const CAMPAIGN_MEMBER_UNIVERSAL_IDENTIFIER = '9c98d3ad-0b22-4e28-9616-f8106c6bcd8c';
+
+export const CAMPAIGN_MEMBER_FIELD_UNIVERSAL_IDENTIFIERS = {
+  name: 'd81e855b-35ce-4c6a-b735-a217908038d3',
+  memberStatus: '5eae76f9-07fd-4465-b521-667647e73137',
+  respondedAt: 'da634f64-632f-470d-8190-db9e9e7142e6',
+} as const;
+
+export const CAMPAIGN_MEMBER_STATUS_OPTION_IDS = {
+  SENT: '1b2920e0-16f1-49b8-bbba-79990b161448',
+  RESPONDED: 'b20d8139-fa1d-416b-909e-c2979d787f71',
+} as const;
+
+export const CAMPAIGN_MEMBER_RELATION_UNIVERSAL_IDENTIFIERS = {
+  campaignOnMember: '2c3c43d3-9864-4ab7-9c24-96bcb55f2131',
+  membersOnCampaign: 'e4fb506a-b473-4bbe-8c74-b949ab326dda',
+  leadOnMember: 'e0e027a2-5f90-458f-928b-10e13497950c',
+  campaignMembershipsOnLead: '26ccb41f-f2fb-41be-9853-b13de27da7b1',
+  personOnMember: 'dee12542-1cdf-45e4-8015-97e2a0201767',
+  campaignMembershipsOnPerson: '44e62244-371e-4663-b8a1-a302357b492c',
+} as const;
+
+export const ALL_CAMPAIGN_MEMBERS_VIEW_UNIVERSAL_IDENTIFIER = 'baf4fffe-8079-4391-833c-2f5070ac1d78';
+export const ALL_CAMPAIGN_MEMBERS_VIEW_FIELD_UNIVERSAL_IDENTIFIERS = [
+  '3525bc37-d959-4bf3-89a4-9d34fa4c5739',
+  '415d1feb-e956-4003-a456-59ed15613bfb',
+  '69e7226c-2f4d-4ed7-8609-e78e19689919',
+  'a8c072fa-6d68-4238-a4f6-d01c93dc9a22',
+  '6b7e311a-8f37-4476-85e9-ecdb93c54b8e',
+  '9ec49f9d-692f-4369-a254-2e4d51211f55',
+] as const;
+
+export const ON_CAMPAIGN_MEMBER_CHANGED_LOGIC_FUNCTION_UNIVERSAL_IDENTIFIER = '2763f253-06ea-4878-a93f-47297f1febab';
+export const CAMPAIGN_MEMBERS_NAVIGATION_MENU_ITEM_UNIVERSAL_IDENTIFIER = 'a90e97b7-0405-4047-92be-f684e04c5885';

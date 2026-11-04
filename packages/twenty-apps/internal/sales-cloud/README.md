@@ -37,6 +37,12 @@ fork keeps merging cleanly from upstream.
     are counted in "Opportunities in other currencies" instead.
 - **All Campaigns** table view.
 
+Campaign members: add any number of leads or people to a campaign as
+**Campaign members** (status Sent or Responded). Each campaign counts its
+members and responses. A member's name fills in as "<campaign> - <member>",
+and the first response time is stamped. Converting a lead moves its
+memberships onto the new person.
+
 ## Forecasting
 
 - Opportunities get **Probability %**, **Forecast category** (Pipeline, Best
@@ -63,12 +69,66 @@ fork keeps merging cleanly from upstream.
   opportunities that lack them and recalculates every campaign, so nothing
   stays stale if an update was missed.
 
+## Products, price books and quotes
+
+- **Product**: name, code, family, list price, active.
+- **Price book** with **price book entries**: one product's price in one
+  price book. An entry's name fills in as "<product> - <price book>".
+- **Quote** on an opportunity, with a price book, status (Draft, In review,
+  Presented, Accepted, Denied) and expiration date.
+- **Quote line items**: picking a product names the line and sets its unit
+  price from the quote's price book (the active entry), or else the
+  product's list price. A price typed in the same edit is kept.
+  - Quantity defaults to 1. Discount % is held between 0 and 100.
+  - Line subtotal = quantity × unit price; line total = subtotal less discount.
+- The quote's subtotal, discount, total and line count update automatically.
+  Lines are added in one currency (the one most lines use) and never
+  converted; lines left out are listed in **Pricing warning**.
+- **Sync to opportunity** keeps the opportunity's amount equal to the quote
+  total, as in Salesforce. Only one quote per opportunity syncs: turning it on
+  turns it off on that opportunity's other quotes.
+- Changing a quote's price book does not re-price its existing lines.
+
+## Cases
+
+- **Case** object (stored as `supportCase`, since CASE is an SQL keyword):
+  subject, status (New, Working, Escalated, On hold, Closed), priority,
+  origin, type, description, resolution, company, contact and owner.
+- Each case gets a **Due by** deadline from its priority:
+
+  | Priority | Due within |
+  |----------|------------|
+  | Critical | 4 hours    |
+  | High     | 8 hours    |
+  | Medium   | 24 hours   |
+  | Low      | 72 hours   |
+
+  Change these in `src/constants/support-case-options.ts`.
+- **First responded at** is stamped when a case first leaves New, and
+  **Closed at** when it closes (cleared if reopened).
+- **Overdue** is set when a case closes after its deadline, and every hour
+  for open cases past it.
+- **All Cases** table, **Case Board** kanban by status, and a **Service**
+  dashboard: open cases, overdue open cases, open cases by priority, cases by
+  status.
+
+## Permissions
+
+Lead conversion runs as the user who converts, so their permissions apply.
+Everything else (forecasts, campaign results, quote totals, case deadlines,
+the nightly and hourly jobs) runs as the app, so totals cover every record.
+The app's role may destroy records only to undo a conversion that failed
+halfway, removing exactly the records that conversion created.
+
 ## Leads: notes
 
 Converting twice is harmless: a lead that already has an opportunity is
-skipped. If a step fails, the records that conversion created are moved to the
-trash, the lead goes back to Qualified, and the reason is shown in its
-**Conversion error** field. Conversion handles at most 100 leads per call.
+skipped. If a step fails, the records that conversion created are deleted
+(not trashed, so their email and website are free for a retry), the lead goes
+back to Qualified, and the reason is shown in its **Conversion error** field.
+Conversion handles at most 100 leads per call. A company is reused when its
+name or its website matches the lead's. A lead created or imported as
+Converted is converted too.
 
 ## Develop
 
@@ -79,5 +139,6 @@ yarn test               # unit tests
 yarn twenty dev         # sync to a running Twenty server
 ```
 
-Not yet built: products and price books, quotes, cases, and campaign members
-(a lead or person belonging to several campaigns).
+Not built: currency conversion (amounts in other currencies are left out of
+totals and counted instead), and re-pricing a quote's lines when its price
+book changes.

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createFakeCrmClient } from 'src/__tests__/fake-crm-client';
 import { computeCampaignRollup } from 'src/utils/compute-campaign-rollup';
 import { convertLeads } from 'src/utils/convert-leads';
+import { syncCampaignMembers } from 'src/utils/sync-campaign-members';
 import {
   collectCampaignIds,
   recomputeAllCampaignRollups,
@@ -28,6 +29,8 @@ describe('computeCampaignRollup', () => {
     );
 
     expect(rollup).toEqual({
+      memberCount: 0,
+      respondedMemberCount: 0,
       leadCount: 3,
       convertedLeadCount: 2,
       opportunityCount: 5,
@@ -90,6 +93,60 @@ describe('recomputeCampaignRollups', () => {
         { recordId: 'o3', properties: { after: { campaignId: null } } },
       ]),
     ).toEqual(['old', 'new']);
+  });
+});
+
+describe('campaign members', () => {
+  it('counts members and responses on the campaign', async () => {
+    const { client, tables } = createFakeCrmClient({
+      campaign: [{ id: 'webinar', name: 'Webinar' }],
+      campaignMember: [
+        { id: 'm1', campaignId: 'webinar', memberStatus: 'SENT' },
+        { id: 'm2', campaignId: 'webinar', memberStatus: 'RESPONDED' },
+        { id: 'm3', campaignId: 'other', memberStatus: 'RESPONDED' },
+      ],
+    });
+
+    await recomputeCampaignRollups({ client, campaignIds: ['webinar'], now: NOW });
+
+    expect(tables.campaign[0]).toMatchObject({ memberCount: 2, respondedMemberCount: 1 });
+  });
+
+  it('names a member and stamps its first response, keeping a typed name', async () => {
+    const { client, tables } = createFakeCrmClient({
+      campaign: [{ id: 'c', name: 'Webinar' }],
+      lead: [{ id: 'l', name: { firstName: 'Ada', lastName: 'Lovelace' } }],
+      person: [{ id: 'p', name: { firstName: 'Grace', lastName: 'Hopper' } }],
+      campaignMember: [
+        { id: 'm1', campaignId: 'c', leadId: 'l', memberStatus: 'RESPONDED' },
+        { id: 'm2', campaignId: 'c', leadId: 'l', personId: 'p', memberStatus: 'SENT' },
+        { id: 'm3', campaignId: 'c', name: 'VIP', memberStatus: 'RESPONDED', respondedAt: '2026-01-01T00:00:00.000Z' },
+      ],
+    });
+
+    await syncCampaignMembers(client, ['m1', 'm2', 'm3'], NOW());
+
+    expect(tables.campaignMember.map(({ name, respondedAt }) => [name, respondedAt ?? null])).toEqual([
+      ['Webinar - Ada Lovelace', '2026-11-04T12:00:00.000Z'],
+      ['Webinar - Grace Hopper', null],
+      ['VIP', '2026-01-01T00:00:00.000Z'],
+    ]);
+  });
+
+  it('moves a converted lead\'s memberships onto the new person', async () => {
+    const { client, tables } = createFakeCrmClient({
+      lead: [{ id: 'l1', name: { firstName: 'Grace', lastName: 'Hopper' }, companyName: 'Navy' }],
+      campaignMember: [
+        { id: 'm1', campaignId: 'a', leadId: 'l1' },
+        { id: 'm2', campaignId: 'b', leadId: 'l1', personId: 'someone-else' },
+        { id: 'm3', campaignId: 'a', leadId: 'other' },
+      ],
+    });
+
+    await convertLeads({ client, leadIds: ['l1'], now: NOW });
+
+    const personId = tables.person[0].id;
+    expect(tables.campaignMember.map((member) => member.personId ?? null)).toEqual([personId, 'someone-else', null]);
   });
 });
 

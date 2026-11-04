@@ -107,6 +107,27 @@ const findPersonIdByEmail = async (
   return people?.edges?.[0]?.node?.id;
 };
 
+// Like Salesforce, the lead's campaign memberships follow it to the person,
+// so the person's campaign history is complete after conversion.
+const linkCampaignMembershipsToPerson = async (
+  client: CrmClient,
+  leadId: string,
+  personId: string,
+) => {
+  const { campaignMembers } = await client.query({
+    campaignMembers: {
+      __args: { filter: { leadId: { eq: leadId }, personId: { is: 'NULL' } }, first: 200 },
+      edges: { node: { id: true } },
+    },
+  });
+
+  for (const edge of campaignMembers?.edges ?? []) {
+    await client.mutation({
+      updateCampaignMember: { __args: { id: edge.node.id, data: { personId } }, id: true },
+    });
+  }
+};
+
 type CreatedRecord = { mutationName: string; id: string };
 
 // Twenty has no multi-mutation transaction for apps, so a failed conversion
@@ -181,6 +202,8 @@ const convertLead = async (
     });
     const opportunityId = createOpportunity.id as string;
     created.push({ mutationName: 'destroyOpportunity', id: opportunityId });
+
+    await linkCampaignMembershipsToPerson(client, lead.id, personId);
 
     await client.mutation({
       updateLead: {

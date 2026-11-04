@@ -1,4 +1,5 @@
 import {
+  CAMPAIGN_MEMBER_STATUS_OPTION_IDS,
   CAMPAIGN_STATUS_OPTION_IDS,
   CAMPAIGN_TYPE_OPTION_IDS,
 } from 'src/constants/campaign-forecast-identifiers';
@@ -37,4 +38,14 @@ export const CAMPAIGN_STATUS_OPTIONS = [
   { id: CAMPAIGN_STATUS_OPTION_IDS.IN_PROGRESS, value: CampaignStatus.IN_PROGRESS, label: 'In progress', position: 1, color: 'blue' as const },
   { id: CAMPAIGN_STATUS_OPTION_IDS.COMPLETED, value: CampaignStatus.COMPLETED, label: 'Completed', position: 2, color: 'green' as const },
   { id: CAMPAIGN_STATUS_OPTION_IDS.ABORTED, value: CampaignStatus.ABORTED, label: 'Aborted', position: 3, color: 'gray' as const },
+];
+
+export enum CampaignMemberStatus {
+  SENT = 'SENT',
+  RESPONDED = 'RESPONDED',
+}
+
+export const CAMPAIGN_MEMBER_STATUS_OPTIONS = [
+  { id: CAMPAIGN_MEMBER_STATUS_OPTION_IDS.SENT, value: CampaignMemberStatus.SENT, label: 'Sent', position: 0, color: 'sky' as const },
+  { id: CAMPAIGN_MEMBER_STATUS_OPTION_IDS.RESPONDED, value: CampaignMemberStatus.RESPONDED, label: 'Responded', position: 1, color: 'green' as const },
 ];

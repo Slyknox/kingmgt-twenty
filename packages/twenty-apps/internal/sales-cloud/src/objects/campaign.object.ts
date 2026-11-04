@@ -48,6 +48,8 @@ export default defineObject({
     { universalIdentifier: F.wonAmount, type: FieldType.CURRENCY, name: 'wonAmount', label: 'Won amount', description: CALCULATED, icon: 'IconCash', isNullable: true },
     { universalIdentifier: F.roiPercent, type: FieldType.NUMBER, name: 'roiPercent', label: 'ROI %', description: `(Won amount - actual cost) / actual cost. Empty without an actual cost. ${CALCULATED}`, icon: 'IconPercentage', isNullable: true },
     { universalIdentifier: F.otherCurrencyOpportunityCount, type: FieldType.NUMBER, name: 'otherCurrencyOpportunityCount', label: 'Opportunities in other currencies', description: `Opportunities left out of the amounts because their currency differs from the campaign's. ${CALCULATED}`, icon: 'IconCurrencyOff', isNullable: true },
+    { universalIdentifier: F.memberCount, type: FieldType.NUMBER, name: 'memberCount', label: 'Members', description: `Leads and people added to this campaign. ${CALCULATED}`, icon: 'IconUsersGroup', isNullable: true },
+    { universalIdentifier: F.respondedMemberCount, type: FieldType.NUMBER, name: 'respondedMemberCount', label: 'Responded', description: `Members marked Responded. ${CALCULATED}`, icon: 'IconMessageReply', isNullable: true },
     { universalIdentifier: F.rollupsUpdatedAt, type: FieldType.DATE_TIME, name: 'rollupsUpdatedAt', label: 'Results updated at', icon: 'IconRefresh', isNullable: true },
   ],
 });

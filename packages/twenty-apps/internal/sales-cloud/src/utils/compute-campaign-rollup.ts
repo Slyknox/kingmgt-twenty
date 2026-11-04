@@ -2,6 +2,7 @@ import {
   ForecastCategory,
   WON_OPPORTUNITY_STAGE,
 } from 'src/constants/forecast-options';
+import { CampaignMemberStatus } from 'src/constants/campaign-options';
 import { LeadStatus } from 'src/constants/lead-options';
 import { DEFAULT_CURRENCY_CODE, hasAmount } from 'src/utils/currency';
 import { type Currency } from 'src/utils/lead-conversion-types';
@@ -21,7 +22,14 @@ export type CampaignOpportunityRecord = {
   amount?: Currency | null;
 };
 
+export type CampaignMemberRecord = {
+  campaignId?: string | null;
+  memberStatus?: string | null;
+};
+
 export type CampaignRollup = {
+  memberCount: number;
+  respondedMemberCount: number;
   leadCount: number;
   convertedLeadCount: number;
   opportunityCount: number;
@@ -70,6 +78,7 @@ export const computeCampaignRollup = (
   campaign: CampaignRecord,
   leads: CampaignLeadRecord[],
   opportunities: CampaignOpportunityRecord[],
+  members: CampaignMemberRecord[] = [],
 ): CampaignRollup => {
   const currencyCode = resolveCampaignCurrency(campaign, opportunities);
   let pipelineMicros = 0;
@@ -107,6 +116,10 @@ export const computeCampaignRollup = (
       : null;
 
   return {
+    memberCount: members.length,
+    respondedMemberCount: members.filter(
+      (member) => member.memberStatus === CampaignMemberStatus.RESPONDED,
+    ).length,
     leadCount: leads.length,
     convertedLeadCount: leads.filter((lead) => lead.status === LeadStatus.CONVERTED).length,
     opportunityCount: opportunities.length,
